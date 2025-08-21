@@ -1,0 +1,16 @@
+@import "var";
+@import "scrollbar";
+
+@mixin code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@mixin ell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin win-drag {
+  -webkit-app-region: drag;
+}
