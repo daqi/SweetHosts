@@ -13,6 +13,17 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": "./",
+    "paths": {
+      "@renderer/*": ["src/switchhosts/renderer/*"],
+      "@/*": ["SwitchHosts/src/*"],
+      "@common/*": ["SwitchHosts/src/common/*"],
+      "@assets/*": ["SwitchHosts/assets/*"],
+      "@styles/*": ["src/switchhosts/renderer/styles/*"],
+      "@root/*": ["SwitchHosts/*"],
+      "@main/*": ["SwitchHosts/src/main/*"],
+      "@src/*": ["SwitchHosts/src/*"]
+    },
 
     /* Linting */
     "strict": true,

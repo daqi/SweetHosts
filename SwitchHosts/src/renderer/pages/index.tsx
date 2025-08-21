@@ -54,7 +54,6 @@ export default () => {
 
   const onConfigsUpdate = async () => {
     if (!configs) return
-
     setLocale(configs.locale)
     setLeftWidth(configs.left_panel_width)
     setLeftShow(configs.left_panel_show)
