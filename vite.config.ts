@@ -1,7 +1,9 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -11,14 +13,7 @@ export default defineConfig(async () => ({
   plugins: [react()],
   resolve: {
     alias: {
-  '@renderer': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'src/switchhosts/renderer'),
-  '@': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts/src'),
-  '@common': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts/src/common'),
-  '@assets': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts/assets'),
-  '@styles': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'src/switchhosts/renderer/styles'),
-  '@root': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts'),
-  '@main': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts/src/main'),
-  '@src': path.resolve(fileURLToPath(new URL('.', import.meta.url)), 'SwitchHosts/src'),
+      '@': path.resolve(__dirname, 'src'),
     },
   },
 
@@ -33,14 +28,14 @@ export default defineConfig(async () => ({
     host: host || false,
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: 'ws',
           host,
           port: 1421,
         }
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ['**/src-tauri/**'],
     },
   },
 }));

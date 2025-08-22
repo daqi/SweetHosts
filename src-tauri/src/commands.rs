@@ -3,16 +3,16 @@
 // SwitchHosts/src/common/data.d.ts (IHostsListObject, IHostsContentObject, ITrashcanObject, etc.)
 // We keep storage as serde_json::Value for flexibility but preserve fields like
 // `id`, `title`, `on`, `type`, `children`, `content`, `add_time_ms` to maintain compatibility.
-use serde::Serialize;
-use serde_json::Value;
-use std::fs;
-use std::path::PathBuf;
-use std::env;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::process::Command;
-use serde_json::json;
-use std::io::Read;
 use reqwest::blocking::Client;
+use serde::Serialize;
+use serde_json::json;
+use serde_json::Value;
+use std::env;
+use std::fs;
+use std::io::Read;
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn data_dir() -> PathBuf {
     if let Ok(dir) = env::var("SWEETHOSTS_DATA_DIR") {
@@ -81,16 +81,39 @@ pub fn set_list(v: Vec<Value>) -> bool {
 }
 
 #[tauri::command]
-pub fn get_content_of_list(id: String) -> String {
-    if let Err(_) = ensure_data_dir() {
-        return String::new();
+pub fn get_content_of_list() -> String {
+    // read list.json and collect ids where on == true
+    let list = get_list();
+    let mut ids: Vec<String> = Vec::new();
+
+    fn collect(items: &Vec<Value>, out: &mut Vec<String>) {
+        for item in items {
+            if let Some(on) = item.get("on").and_then(|v| v.as_bool()) {
+                if on {
+                    if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                        out.push(id.to_string());
+                    }
+                }
+            }
+            if let Some(children) = item.get("children").and_then(|v| v.as_array()) {
+                collect(children, out);
+            }
+        }
     }
-    let mut p = data_dir();
-    p.push(format!("list_content_{}.txt", id));
-    match fs::read_to_string(p) {
-        Ok(s) => s,
-        Err(_) => String::new(),
+
+    collect(&list, &mut ids);
+
+    let mut contents: Vec<String> = Vec::new();
+    for id in ids {
+        let mut p = data_dir();
+        p.push(format!("hosts_content_{}.txt", id));
+        if let Ok(s) = fs::read_to_string(p) {
+            contents.push(format!("# file: {}\n{}", id, s));
+        }
     }
+
+    let content = contents.join("\n\n");
+    content
 }
 
 #[tauri::command]
@@ -143,8 +166,14 @@ pub fn move_to_trashcan(id: String) -> bool {
 
         let mut entry = serde_json::Map::new();
         entry.insert("data".to_string(), obj);
-    let ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0) as i64;
-    entry.insert("add_time_ms".to_string(), Value::Number(serde_json::Number::from(ms)));
+        let ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0) as i64;
+        entry.insert(
+            "add_time_ms".to_string(),
+            Value::Number(serde_json::Number::from(ms)),
+        );
         entry.insert("parent_id".to_string(), Value::Null);
 
         trash.push(Value::Object(entry));
@@ -273,7 +302,9 @@ pub fn config_set(key: String, val: Value) -> bool {
     p.push("config.json");
     let mut obj = if p.exists() {
         match fs::read_to_string(&p) {
-            Ok(s) => serde_json::from_str::<Value>(&s).unwrap_or(Value::Object(serde_json::Map::new())),
+            Ok(s) => {
+                serde_json::from_str::<Value>(&s).unwrap_or(Value::Object(serde_json::Map::new()))
+            }
             Err(_) => Value::Object(serde_json::Map::new()),
         }
     } else {
@@ -284,7 +315,10 @@ pub fn config_set(key: String, val: Value) -> bool {
         map.insert(key, val);
     }
 
-    match fs::write(p, serde_json::to_string(&obj).unwrap_or_else(|_| "{}".to_string())) {
+    match fs::write(
+        p,
+        serde_json::to_string(&obj).unwrap_or_else(|_| "{}".to_string()),
+    ) {
         Ok(_) => true,
         Err(_) => false,
     }
@@ -353,8 +387,15 @@ pub fn get_system_hosts() -> String {
 
 #[tauri::command]
 pub fn get_hosts_content(id: String) -> String {
-    // Use same storage as list contents
-    get_content_of_list(id)
+    if let Err(_) = ensure_data_dir() {
+        return String::new();
+    }
+    let mut p = data_dir();
+    p.push(format!("hosts_content_{}.txt", id));
+    match fs::read_to_string(p) {
+        Ok(s) => s,
+        Err(_) => String::new(),
+    }
 }
 
 #[tauri::command]
@@ -378,7 +419,13 @@ pub fn set_system_hosts(content: String, opts: Option<String>) -> Value {
     if std::env::var("SWEETHOSTS_SAFE_MODE").unwrap_or_default() == "1" {
         // write to temp file instead
         let mut tmp = env::temp_dir();
-        tmp.push(format!("sweethosts_safe_{}.hosts", SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)));
+        tmp.push(format!(
+            "sweethosts_safe_{}.hosts",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
         let _ = fs::write(&tmp, &content);
         return json!({ "success": true, "old_content": old_content, "new_content": content, "safe_path": tmp.to_string_lossy() });
     }
@@ -387,7 +434,8 @@ pub fn set_system_hosts(content: String, opts: Option<String>) -> Value {
     match fs::write(&sys_path, &content) {
         Ok(_) => {
             // success
-            let res = json!({ "success": true, "old_content": old_content, "new_content": content });
+            let res =
+                json!({ "success": true, "old_content": old_content, "new_content": content });
             // add history entries: old and new
             let _ = add_history_internal(&old_content);
             let _ = add_history_internal(&content);
@@ -399,7 +447,13 @@ pub fn set_system_hosts(content: String, opts: Option<String>) -> Value {
                 if let Some(pw) = opts {
                     // write tmp file
                     let mut tmp = env::temp_dir();
-                    let rand_part = format!("{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+                    let rand_part = format!(
+                        "{}",
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .map(|d| d.as_nanos())
+                            .unwrap_or(0)
+                    );
                     tmp.push(format!("swh_{}.txt", rand_part));
                     let _ = fs::write(&tmp, &content);
 
@@ -444,11 +498,23 @@ fn add_history_internal(content: &str) -> bool {
     let mut history = read_json_array(p.clone());
 
     let mut entry = serde_json::Map::new();
-    let id_str = format!("{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+    let id_str = format!(
+        "{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
     entry.insert("id".to_string(), Value::String(id_str));
     entry.insert("content".to_string(), Value::String(content.to_string()));
-    let ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0) as i64;
-    entry.insert("add_time_ms".to_string(), Value::Number(serde_json::Number::from(ms)));
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0) as i64;
+    entry.insert(
+        "add_time_ms".to_string(),
+        Value::Number(serde_json::Number::from(ms)),
+    );
 
     history.push(Value::Object(entry));
 
@@ -559,21 +625,36 @@ pub fn export_data() -> Option<String> {
 // cmd history (command run history) — stored in cmd_history.json
 #[tauri::command]
 pub fn cmd_get_history_list() -> Vec<Value> {
-    if let Err(_) = ensure_data_dir() { return vec![]; }
-    let mut p = data_dir(); p.push("cmd_history.json"); read_json_array(p)
+    if let Err(_) = ensure_data_dir() {
+        return vec![];
+    }
+    let mut p = data_dir();
+    p.push("cmd_history.json");
+    read_json_array(p)
 }
 
 #[tauri::command]
 pub fn cmd_delete_history(id: String) -> bool {
-    if let Err(_) = ensure_data_dir() { return false; }
-    let mut p = data_dir(); p.push("cmd_history.json");
+    if let Err(_) = ensure_data_dir() {
+        return false;
+    }
+    let mut p = data_dir();
+    p.push("cmd_history.json");
     let mut v = read_json_array(p.clone());
     let original = v.len();
     v.retain(|item| {
         // support both "id" and "_id"
-        let keep_id = item.get("id").and_then(|x| x.as_str()).map(|s| s != id).unwrap_or(true);
-    let keep_id2 = item.get("_id").and_then(|x| x.as_str()).map(|s| s != id).unwrap_or(true);
-    keep_id && keep_id2
+        let keep_id = item
+            .get("id")
+            .and_then(|x| x.as_str())
+            .map(|s| s != id)
+            .unwrap_or(true);
+        let keep_id2 = item
+            .get("_id")
+            .and_then(|x| x.as_str())
+            .map(|s| s != id)
+            .unwrap_or(true);
+        keep_id && keep_id2
     });
     let changed = v.len() != original;
     write_json_array(p, &v);
@@ -582,9 +663,15 @@ pub fn cmd_delete_history(id: String) -> bool {
 
 #[tauri::command]
 pub fn cmd_clear_history() -> bool {
-    if let Err(_) = ensure_data_dir() { return false; }
-    let mut p = data_dir(); p.push("cmd_history.json");
-    match fs::write(p, "[]") { Ok(_) => true, Err(_) => false }
+    if let Err(_) = ensure_data_dir() {
+        return false;
+    }
+    let mut p = data_dir();
+    p.push("cmd_history.json");
+    match fs::write(p, "[]") {
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 #[tauri::command]
@@ -592,7 +679,9 @@ pub fn try_to_run() -> Option<Value> {
     // read command from config key 'cmd_after_hosts_apply'
     if let Some(cmd_val) = config_get("cmd_after_hosts_apply".to_string()) {
         if let Some(cmd) = cmd_val.as_str() {
-            if cmd.trim().is_empty() { return None; }
+            if cmd.trim().is_empty() {
+                return None;
+            }
             // run command via shell
             let output = Command::new("sh").arg("-c").arg(cmd).output();
             let (success, stdout_s, stderr_s) = match output {
@@ -605,17 +694,32 @@ pub fn try_to_run() -> Option<Value> {
             };
 
             let mut entry = serde_json::Map::new();
-            let id_str = format!("{}", SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+            let id_str = format!(
+                "{}",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0)
+            );
             entry.insert("id".to_string(), Value::String(id_str));
             entry.insert("success".to_string(), Value::Bool(success));
             entry.insert("stdout".to_string(), Value::String(stdout_s.clone()));
             entry.insert("stderr".to_string(), Value::String(stderr_s.clone()));
-            let ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0) as i64;
-            entry.insert("add_time_ms".to_string(), Value::Number(serde_json::Number::from(ms)));
+            let ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0) as i64;
+            entry.insert(
+                "add_time_ms".to_string(),
+                Value::Number(serde_json::Number::from(ms)),
+            );
 
             // append to cmd_history.json
-            if let Err(_) = ensure_data_dir() { return Some(Value::Object(entry)); }
-            let mut p = data_dir(); p.push("cmd_history.json");
+            if let Err(_) = ensure_data_dir() {
+                return Some(Value::Object(entry));
+            }
+            let mut p = data_dir();
+            p.push("cmd_history.json");
             let mut v = read_json_array(p.clone());
             v.push(Value::Object(entry.clone()));
             let _ = write_json_array(p, &v);
@@ -641,10 +745,14 @@ pub fn import_data(path: String) -> Result<bool, String> {
                 Ok(v) => {
                     // naive import: write list and trash
                     if let Some(list) = v.get("list").and_then(|x| x.as_array()) {
-                        let mut p = data_dir(); p.push("list.json"); write_json_array(p, list);
+                        let mut p = data_dir();
+                        p.push("list.json");
+                        write_json_array(p, list);
                     }
                     if let Some(trash) = v.get("trashcan").and_then(|x| x.as_array()) {
-                        let mut p = data_dir(); p.push("trashcan.json"); write_json_array(p, trash);
+                        let mut p = data_dir();
+                        p.push("trashcan.json");
+                        write_json_array(p, trash);
                     }
                     return Ok(true);
                 }
@@ -670,7 +778,9 @@ pub fn import_data_from_url(url: String) -> Result<bool, String> {
             match serde_json::from_str::<Value>(&s) {
                 Ok(v) => {
                     if let Some(list) = v.get("list").and_then(|x| x.as_array()) {
-                        let mut p = data_dir(); p.push("list.json"); write_json_array(p, list);
+                        let mut p = data_dir();
+                        p.push("list.json");
+                        write_json_array(p, list);
                     }
                     return Ok(true);
                 }
@@ -685,14 +795,22 @@ pub fn import_data_from_url(url: String) -> Result<bool, String> {
 #[tauri::command]
 pub fn find_get_history() -> Vec<Value> {
     // reuse cfg-like storage: use file find_history.json
-    if let Err(_) = ensure_data_dir() { return vec![]; }
-    let mut p = data_dir(); p.push("find_history.json"); read_json_array(p)
+    if let Err(_) = ensure_data_dir() {
+        return vec![];
+    }
+    let mut p = data_dir();
+    p.push("find_history.json");
+    read_json_array(p)
 }
 
 #[tauri::command]
 pub fn find_set_history(list: Vec<Value>) -> bool {
-    if let Err(_) = ensure_data_dir() { return false; }
-    let mut p = data_dir(); p.push("find_history.json"); write_json_array(p, &list)
+    if let Err(_) = ensure_data_dir() {
+        return false;
+    }
+    let mut p = data_dir();
+    p.push("find_history.json");
+    write_json_array(p, &list)
 }
 
 #[tauri::command]
