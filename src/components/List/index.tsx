@@ -6,6 +6,7 @@ import { v4 as uuidV4 } from 'uuid';
 import { useRef, useState } from 'react';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import writeHostsToSystem from '@/utils/writeHostsToSystem';
+import { AiOutlineEnter, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 
 function ListItem(props: {
   item: Item;
@@ -19,7 +20,8 @@ function ListItem(props: {
   const [editing, setEditing] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const handleEdit = () => {
+  const handleEdit = (e: React.MouseEvent<HTMLSpanElement>) => {
+    e.stopPropagation();
     if (item.system) return;
     if (!active) return;
     setEditing(true);
@@ -31,6 +33,11 @@ function ListItem(props: {
         input.select();
       }
     }, 0);
+  };
+
+  const handleDelete = (e: React.MouseEvent<HTMLSpanElement>) => {
+    e.stopPropagation();
+    onDelete();
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -54,13 +61,18 @@ function ListItem(props: {
       ref={wrapperRef}
     >
       <span className={styles.nameWrapper}>
-        <input
-          className={styles.checkbox}
-          type="checkbox"
-          checked={item.on}
-          onChange={(e) => onCheck(e.target.checked)}
-          readOnly={item.system}
-        />
+        <label className={styles.checkbox}>
+          <input
+            className={styles.checkboxInput}
+            type="checkbox"
+            checked={item.on}
+            onChange={(e) => onCheck(e.target.checked)}
+            disabled={item.system}
+          />
+          <div className={styles.checkboxControl}>
+
+          </div>
+        </label>
         {editing ? (
           <input
             defaultValue={item.name}
@@ -79,11 +91,11 @@ function ListItem(props: {
             </span>
             {item.system ? null : (
               <>
-                <span className={styles.edit} onClick={handleEdit}>
-                  e
+                <span className={cx(styles.edit, styles.icon)} onClick={handleEdit}>
+                  <AiOutlineEdit />
                 </span>
-                <span className={styles.delete} onClick={onDelete}>
-                  d
+                <span className={cx(styles.delete, styles.icon)} onClick={handleDelete}>
+                  <AiOutlineDelete/>
                 </span>
               </>
             )}
@@ -124,7 +136,6 @@ export default function List() {
               }
             }}
             onDelete={async () => {
-              console.log('onDelete');
               if (await confirm('Are you sure you want to delete this item?')) {
                 await deleteItem(el.id);
                 await writeHostsToSystem();
@@ -147,7 +158,7 @@ export default function List() {
       >
         <input name="name" type="text" className={styles.input} />
         <button type="submit" className={styles.addButton}>
-          OK
+          <AiOutlineEnter />
         </button>
       </form>
     </div>

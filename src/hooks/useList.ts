@@ -49,6 +49,12 @@ export default function useList() {
       return updateList(next);
     },
     deleteItem: async (id: string) => {
+      if (current?.id === id) {
+        const index = list.findIndex((item) => item.id === id);
+        if (index !== -1) {
+          setCurrent(list[index - 1] || list[index + 1] || null);
+        }
+      }
       const next = list.filter((item) => item.id !== id);
       return updateList(next);
     },
