@@ -105,7 +105,7 @@ pub fn get_content_of_list() -> String {
         let mut p = data_dir();
         p.push(format!("hosts_content_{}.txt", id));
         if let Ok(s) = fs::read_to_string(p) {
-            contents.push(format!("# file: {}\n{}", id, s));
+            contents.push(s);
         }
     }
 

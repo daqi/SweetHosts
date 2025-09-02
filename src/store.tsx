@@ -15,7 +15,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
   const { list, current, setCurrent, updateList, createItem, updateItem, deleteItem } =
     useList();
 
-  const { content, contentId, updateContent, refreshSystemHosts } = useContent(
+  const { content, contentId, updateContent } = useContent(
     current?.id
   );
 
@@ -31,8 +31,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
         deleteItem,
         content,
         contentId,
-        updateContent,
-        refreshSystemHosts
+        updateContent
       }}
     >
       {children}

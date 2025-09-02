@@ -114,7 +114,6 @@ export default function List() {
     deleteItem,
     current,
     setCurrent,
-    refreshSystemHosts,
   } = useStore();
   return (
     <div className={styles.listWrapper}>
@@ -128,7 +127,6 @@ export default function List() {
             onCheck={async (checked) => {
               await updateItem(el.id, { on: checked });
               await writeHostsToSystem();
-              await refreshSystemHosts();
             }}
             onEdit={(next) => {
               if (next) {
@@ -139,7 +137,6 @@ export default function List() {
               if (await confirm('Are you sure you want to delete this item?')) {
                 await deleteItem(el.id);
                 await writeHostsToSystem();
-                await refreshSystemHosts();
               }
             }}
           />

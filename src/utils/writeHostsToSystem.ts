@@ -1,6 +1,9 @@
 import commands from '@/commands';
 import message from '@/components/message';
 import promptSystemPassword from '@/components/promptSystemPassword';
+import debounce from 'lodash.debounce';
+import { emit } from '@tauri-apps/api/event';
+import { EVENTS } from '@/events';
 
 const CONTENT_START = '# --- SWEETHOSTS_CONTENT_START ---\n';
 const CONTENT_START1 = '# --- SWITCHHOSTS_CONTENT_START ---\n';
@@ -22,32 +25,28 @@ const getOriginContent = async () => {
   return origin;
 };
 
-const updateSystemHosts = async (
-  content: string,
-  options?: { pswd: string }
-): Promise<{ success: boolean }> => {
-  return commands.setSystemHosts(content, options?.pswd);
-};
-
 const writeHostsToSystem = async () => {
   const originContent = await getOriginContent();
   const content = await commands.getContentOfList();
   const newContent =
     originContent + (content ? `\n\n\n\n${CONTENT_START}\n\n${content}` : '\n');
-  const res = await updateSystemHosts(newContent, { pswd: pswd_cache });
+  const res = await commands.setSystemHosts(newContent, pswd_cache);
   if (res.success) {
-    message.success('更新成功');
-    return true;
+    emit(EVENTS.SYSTEM_HOSTS_UPDATED, res.new_content);
   } else {
     console.log(res);
     message.error('更新失败');
     const pswd = await promptSystemPassword();
     pswd_cache = pswd || '';
-    if (pswd) {
-      await updateSystemHosts(newContent, { pswd: pswd_cache });
+    const res2 = await commands.setSystemHosts(newContent, pswd_cache);
+    if (res2.success) {
+      emit(EVENTS.SYSTEM_HOSTS_UPDATED, res2.new_content);
+    } else {
+      message.error('更新失败');
     }
   }
-  return newContent;
 };
 
-export default writeHostsToSystem;
+const writeHostsToSystemDebounced = debounce(writeHostsToSystem, 600);
+
+export default writeHostsToSystemDebounced;

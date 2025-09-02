@@ -1,24 +1,11 @@
 import { useEffect, useState } from 'react';
 import commands from '@/commands';
 import { Item } from '@/typing';
-import useEvent from '@/hooks/useEvent';
-import { EVENTS } from '@/events';
-
-const systemHostItem: Item = {
-  id: '0',
-  name: 'system',
-  on: true,
-  system: true,
-};
+import { SYSTEM_HOST_ITEM } from '@/constants';
 
 export default function useList() {
   const [list, setList] = useState<Item[]>([]);
-  const [current, setCurrent] = useState<Item | null>(systemHostItem);
-
-  useEvent<Item[]>(EVENTS.LIST_UPDATE, (event) => {
-    const list = event.payload;
-    setList(list);
-  });
+  const [current, setCurrent] = useState<Item | null>(SYSTEM_HOST_ITEM);
 
   useEffect(() => {
     const init = async () => {
@@ -34,7 +21,7 @@ export default function useList() {
   };
 
   return {
-    list: [systemHostItem, ...list],
+    list: [SYSTEM_HOST_ITEM, ...list],
     current,
     setCurrent,
     updateList: commands.setList,

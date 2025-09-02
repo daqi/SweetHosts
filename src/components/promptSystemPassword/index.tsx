@@ -21,7 +21,7 @@ const Modal: React.FC<ModalProps> = ({ onResolve }) => {
     // focus input after mount
     inputRef.current?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [onResolve]);
+  }, []);
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true">
@@ -41,7 +41,11 @@ const Modal: React.FC<ModalProps> = ({ onResolve }) => {
           }}
         />
         <div className={styles.actions}>
-          <button type="button" className={styles.cancelBtn} onClick={() => onResolve(undefined)}>
+          <button
+            type="button"
+            className={styles.cancelBtn}
+            onClick={() => onResolve(undefined)}
+          >
             取消
           </button>
           <button
